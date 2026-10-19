@@ -1,0 +1,766 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Zuhause</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  /* Raumfarbe als animierbare Zahl, damit Farbwechsel weich ineinander übergehen */
+  @property --hue { syntax: "<number>"; inherits: true; initial-value: 215; }
+
+  :root {
+    --hue: 215;
+    --bg: #eef0f5;
+    --section: #ffffff;
+    --text: #0f1419;
+    --hint: #7f8794;
+    --akzent: hsl(var(--hue) 78% 52%);
+    --akzent-weich: hsl(var(--hue) 78% 52% / .13);
+    --akzent-text: #ffffff;
+    --spur: rgba(0, 0, 0, .08);
+    --rand: rgba(255, 255, 255, .6);
+    --blob: .55;
+    --schatten: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(20,30,60,.07);
+    --r: 24px;
+    --r-klein: 16px;
+    transition: --hue .8s ease;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d141d; --section: #172230; --text: #f2f4f7; --hint: #7d8b99;
+      --akzent: hsl(var(--hue) 82% 63%); --akzent-weich: hsl(var(--hue) 82% 63% / .16);
+      --spur: rgba(255,255,255,.1); --rand: rgba(255,255,255,.06); --blob: .3;
+      --schatten: 0 8px 24px rgba(0,0,0,.25);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d141d; --section: #172230; --text: #f2f4f7; --hint: #7d8b99;
+    --akzent: hsl(var(--hue) 82% 63%); --akzent-weich: hsl(var(--hue) 82% 63% / .16);
+    --spur: rgba(255,255,255,.1); --rand: rgba(255,255,255,.06); --blob: .3;
+    --schatten: 0 8px 24px rgba(0,0,0,.25);
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { background: var(--bg); }
+  body {
+    margin: 0;
+    color: var(--text);
+    font: 16px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    padding-bottom: calc(32px + env(safe-area-inset-bottom));
+    user-select: none; -webkit-user-select: none;
+    overflow-x: hidden;
+  }
+  button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; }
+
+  /* ---------- Bewegter Hintergrund ---------- */
+  .hintergrund { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+  .blob { position: absolute; width: 85vmax; height: 85vmax; border-radius: 50%; opacity: var(--blob); }
+  .blob.a { top: -45vmax; left: -35vmax; background: radial-gradient(circle, hsl(var(--hue) 90% 62%), transparent 62%); animation: drift-a 19s ease-in-out infinite alternate; }
+  .blob.b { bottom: -50vmax; right: -40vmax; background: radial-gradient(circle, hsl(calc(var(--hue) + 45) 90% 62%), transparent 62%); animation: drift-b 23s ease-in-out infinite alternate; }
+  .blob.c { top: 30vh; left: 40vw; width: 50vmax; height: 50vmax; background: radial-gradient(circle, hsl(calc(var(--hue) - 35) 90% 66%), transparent 62%); opacity: calc(var(--blob) * .6); animation: drift-c 27s ease-in-out infinite alternate; }
+  @keyframes drift-a { to { transform: translate(14vw, 10vh) scale(1.1); } }
+  @keyframes drift-b { to { transform: translate(-12vw, -14vh) scale(1.15); } }
+  @keyframes drift-c { to { transform: translate(-30vw, 12vh) scale(.85); } }
+
+  /* ---------- Kopf ---------- */
+  .kopf { padding: 22px 18px 4px; }
+  .gruss { color: var(--hint); font-size: 14px; font-weight: 500; }
+  .kopf h1 { margin: 2px 0 0; font-size: 30px; font-weight: 800; letter-spacing: -.03em; }
+
+  .demo {
+    margin: 14px 16px 0; padding: 12px 14px; border-radius: var(--r-klein);
+    background: var(--akzent-weich); color: var(--akzent); font-size: 13px; font-weight: 500;
+  }
+  .demo button { margin-top: 8px; font-weight: 700; text-decoration: underline; color: var(--akzent); }
+  .befehlsliste { margin-top: 10px; color: var(--text); font-size: 13px; }
+  .befehlsliste h4 { margin: 10px 0 4px; font-size: 13px; color: var(--akzent); }
+  .befehlsliste code { display: inline-block; margin: 2px 4px 2px 0; padding: 3px 7px; border-radius: 7px; background: var(--section); font-size: 12px; }
+
+  /* ---------- Raum-Reiter mit gleitender Markierung ---------- */
+  .reiter-leiste { position: sticky; top: 0; z-index: 10; padding: 14px 0 8px; }
+  .reiter-leiste::before {
+    content: ""; position: absolute; inset: 0;
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+    -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+    -webkit-mask: linear-gradient(#000 75%, transparent); mask: linear-gradient(#000 75%, transparent);
+  }
+  .reiter { position: relative; display: flex; gap: 6px; overflow-x: auto; padding: 0 16px; scrollbar-width: none; }
+  .reiter::-webkit-scrollbar { display: none; }
+  .indikator {
+    position: absolute; top: 0; left: 0; height: 42px; border-radius: 999px;
+    background: var(--akzent); box-shadow: 0 6px 18px hsl(var(--hue) 80% 50% / .35);
+    transition: transform .45s cubic-bezier(.3,1.4,.5,1), width .45s cubic-bezier(.3,1.4,.5,1);
+  }
+  .reiter button {
+    position: relative; z-index: 1; flex: 0 0 auto; height: 42px; padding: 0 16px; border-radius: 999px;
+    font-size: 15px; font-weight: 600; white-space: nowrap; transition: color .3s;
+  }
+  .reiter button[aria-selected="true"] { color: var(--akzent-text); }
+  .reiter button .rsym { display: inline-block; margin-right: 6px; transition: transform .4s cubic-bezier(.3,1.6,.5,1); }
+  .reiter button[aria-selected="true"] .rsym { transform: scale(1.25) rotate(-8deg); }
+
+  /* ---------- Raum ---------- */
+  .buehne { padding: 0 16px; touch-action: pan-y; }
+  .raum-kopf { display: flex; align-items: center; gap: 14px; margin: 14px 2px 16px; }
+  .raum-symbol {
+    width: 58px; height: 58px; border-radius: 20px; display: grid; place-items: center; font-size: 30px;
+    background: var(--akzent-weich); animation: atmen 4s ease-in-out infinite;
+  }
+  @keyframes atmen { 50% { transform: scale(1.06) rotate(3deg); } }
+  .raum-kopf h2 { margin: 0; font-size: 23px; font-weight: 800; letter-spacing: -.02em; }
+  .raum-kopf p { margin: 2px 0 0; color: var(--hint); font-size: 14px; }
+
+  .raum.rein-rechts { animation: rein-rechts .45s cubic-bezier(.2,.9,.3,1) both; }
+  .raum.rein-links  { animation: rein-links  .45s cubic-bezier(.2,.9,.3,1) both; }
+  @keyframes rein-rechts { from { opacity: 0; transform: translateX(40px); } }
+  @keyframes rein-links  { from { opacity: 0; transform: translateX(-40px); } }
+
+  .kacheln { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+
+  /* ---------- Gerätekarten (Glas) ---------- */
+  .karte {
+    position: relative; padding: 16px; border-radius: var(--r);
+    background: var(--section);
+    background: color-mix(in srgb, var(--section) 74%, transparent);
+    -webkit-backdrop-filter: blur(22px) saturate(1.4); backdrop-filter: blur(22px) saturate(1.4);
+    border: 1px solid var(--rand); box-shadow: var(--schatten);
+    display: flex; flex-direction: column; gap: 14px;
+    animation: auftauchen .55s cubic-bezier(.2,.9,.3,1.15) both; animation-delay: calc(var(--i, 0) * 70ms);
+  }
+  .karte.breit { grid-column: 1 / -1; }
+  @keyframes auftauchen { from { opacity: 0; transform: translateY(18px) scale(.96); } }
+
+  .karte-kopf { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .icon {
+    flex: 0 0 auto; width: 48px; height: 48px; border-radius: 16px; display: grid; place-items: center;
+    font-size: 26px; line-height: 1; background: var(--akzent-weich);
+  }
+  .karte-name { font-weight: 700; font-size: 16px; line-height: 1.2; }
+  .karte-info { color: var(--hint); font-size: 13px; margin-top: 2px; }
+  .pruefen { display: inline-block; margin-top: 4px; padding: 2px 7px; border-radius: 6px; font-size: 11px; font-weight: 700; background: hsl(38 95% 55% / .18); color: hsl(32 90% 42%); }
+
+  /* Symbol-Animationen beim Tippen */
+  .icon.e-an.licht    { animation: gluehen .8s ease; }
+  .icon.e-an.klima    { animation: drehen .9s cubic-bezier(.3,1.3,.5,1); }
+  .icon.e-an.heizung  { animation: flackern .8s ease; }
+  .icon.e-an.wasser   { animation: welle .9s ease; }
+  .icon.e-aus         { animation: dimmen .7s ease; }
+  .icon.e-puls        { animation: hupf .6s cubic-bezier(.3,1.6,.5,1); }
+  .icon.e-kalt        { animation: drehen .9s cubic-bezier(.3,1.3,.5,1); background: hsl(200 90% 60% / .25); }
+  .icon.e-warm        { animation: flackern .8s ease; background: hsl(20 95% 58% / .25); }
+  @keyframes gluehen  { 40% { transform: scale(1.18); box-shadow: 0 0 30px 8px hsl(48 100% 60% / .75); background: hsl(48 100% 60% / .35); } }
+  @keyframes drehen   { to { transform: rotate(360deg); } }
+  @keyframes flackern { 20%,60% { transform: scale(1.12) rotate(-6deg); box-shadow: 0 0 24px 6px hsl(20 95% 58% / .55); } 40%,80% { transform: scale(1.06) rotate(6deg); } }
+  @keyframes welle    { 25% { transform: rotate(-12deg) translateY(-3px); } 75% { transform: rotate(12deg) translateY(-3px); } }
+  @keyframes dimmen   { 40% { transform: scale(.86); opacity: .35; filter: grayscale(1); } }
+  @keyframes hupf     { 40% { transform: scale(1.2) translateY(-4px); } }
+
+  /* ---------- Bedienelemente ---------- */
+  .tippbar { position: relative; overflow: hidden; transition: transform .18s cubic-bezier(.3,1.6,.5,1), background-color .25s, color .25s; }
+  .tippbar.gedrueckt { transform: scale(.93); }
+  .welle-fx {
+    position: absolute; border-radius: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px;
+    background: currentColor; opacity: .3; pointer-events: none; animation: ripple .6s ease-out forwards;
+  }
+  @keyframes ripple { to { transform: scale(26); opacity: 0; } }
+  .tippbar.ok { background: hsl(145 63% 45%) !important; color: #fff !important; }
+  .tippbar.ok .welle-fx { background: #fff; }
+  /* Häkchen wird nur darübergelegt – der eigentliche Inhalt der Taste bleibt unverändert */
+  .tippbar.ok:not(.chip) { color: transparent !important; }
+  .tippbar.ok:not(.chip)::after {
+    content: "✓"; position: absolute; inset: 0; display: grid; place-items: center;
+    color: #fff; font-size: 20px; font-weight: 800;
+  }
+  .toast.warnung { background: hsl(32 90% 46%); color: #fff; }
+
+  .abschnitt-titel { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--hint); margin-bottom: 8px; }
+
+  .segment { display: flex; gap: 8px; }
+  .seg { flex: 1 1 0; min-height: 50px; border-radius: var(--r-klein); font-size: 15px; font-weight: 700; background: var(--spur); }
+  .seg.an { background: var(--akzent); color: var(--akzent-text); box-shadow: 0 6px 16px hsl(var(--hue) 80% 50% / .3); }
+
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    flex: 1 0 80px; min-height: 50px; border-radius: var(--r-klein); padding: 0 12px;
+    display: flex; align-items: center; justify-content: center; gap: 7px;
+    font-weight: 700; font-size: 15px; background: var(--akzent-weich); color: var(--akzent);
+  }
+  .chip .csym { display: inline-block; font-size: 18px; }
+  .chip.gedrueckt .csym, .chip.ok .csym { animation: drehen var(--tempo, 1s) linear infinite; }
+
+  .regler-kopf { display: flex; justify-content: space-between; align-items: baseline; }
+  .regler-wert { font-size: 34px; font-weight: 800; letter-spacing: -.03em; color: var(--akzent); font-variant-numeric: tabular-nums; transition: transform .2s cubic-bezier(.3,1.6,.5,1); }
+  .regler-wert small { font-size: 16px; font-weight: 700; margin-left: 2px; }
+  .regler-wert.stoss { transform: scale(1.12); }
+  .regler-zeile { display: flex; align-items: center; gap: 12px; margin: 6px 0 12px; }
+  .rund { flex: 0 0 auto; width: 46px; height: 46px; border-radius: 50%; font-size: 24px; font-weight: 600; background: var(--akzent-weich); color: var(--akzent); }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none; flex: 1; height: 10px; border-radius: 99px; outline: none; margin: 0;
+    background: linear-gradient(to right, hsl(200 85% 58%), var(--akzent) var(--p, 50%), var(--spur) var(--p, 50%));
+  }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 30px; height: 30px; border-radius: 50%; background: #fff; border: 4px solid var(--akzent); box-shadow: 0 3px 10px rgba(0,0,0,.2); }
+  input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 4px solid var(--akzent); box-shadow: 0 3px 10px rgba(0,0,0,.2); }
+  .senden { width: 100%; min-height: 50px; border-radius: var(--r-klein); font-weight: 700; font-size: 15px; background: var(--akzent); color: var(--akzent-text); box-shadow: 0 6px 16px hsl(var(--hue) 80% 50% / .3); }
+
+  .trenner { height: 1px; background: var(--spur); margin: 2px 0; }
+
+  /* ---------- Hinweis im Demo-Modus ---------- */
+  .toast {
+    position: fixed; left: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 30;
+    padding: 14px 16px; border-radius: var(--r-klein); background: var(--text); color: var(--bg);
+    font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    opacity: 0; transform: translateY(24px) scale(.96); pointer-events: none;
+    transition: opacity .25s, transform .35s cubic-bezier(.3,1.5,.5,1);
+  }
+  .toast.sichtbar { opacity: 1; transform: none; }
+  .toast small { display: block; opacity: .65; margin-bottom: 2px; }
+
+  .leer { color: var(--hint); font-size: 14px; padding: 8px 0; }
+
+  @media (min-width: 600px) {
+    .kacheln { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .kopf, .demo, .buehne, .reiter { max-width: 780px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hintergrund" aria-hidden="true"><div class="blob a"></div><div class="blob b"></div><div class="blob c"></div></div>
+
+<header class="kopf">
+  <div class="gruss" id="gruss"></div>
+  <h1 id="titel"></h1>
+</header>
+
+<div id="demo" class="demo" hidden>
+  Demo-Modus: Außerhalb von Telegram werden Befehle nur angezeigt, nicht gesendet.<br>
+  <button type="button" id="liste-knopf">Alle Befehle anzeigen</button>
+  <div id="befehlsliste" class="befehlsliste" hidden></div>
+</div>
+
+<nav class="reiter-leiste">
+  <div id="reiter" class="reiter" role="tablist"><span class="indikator" id="indikator"></span></div>
+</nav>
+
+<main id="buehne" class="buehne"></main>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* =====================================================================
+   KONFIGURATION – hier stehen eure Räume, Geräte und Befehle.
+   =====================================================================
+
+   Die Befehle müssen EXAKT dem Text entsprechen, der beim Tippen auf
+   den Button im Bot-Chat als Nachricht erscheint (inklusive Emojis,
+   Groß-/Kleinschreibung, Leerzeichen). Neue Buttons trägst du genauso ein.
+   Tipp: Öffne die Datei im normalen Browser und tippe auf
+   "Alle Befehle anzeigen" – dann siehst du alle Befehle auf einen Blick.
+
+   Jedes Gerät hat:
+     name       – Anzeigename
+     symbol     – ein Emoji
+     animation  – wie das Symbol beim Tippen reagiert:
+                  "licht", "klima", "heizung" oder "wasser"
+     info       – (optional) kleiner Text unter dem Namen
+     pruefen    – (optional) true = im Demo-Modus als "bitte prüfen" markiert
+     steuerung  – Liste der Bedienelemente (eins oder mehrere):
+
+     1) An/Aus:
+        { art: "schalter", befehlAn: "...", befehlAus: "..." }
+
+     2) Auswahl (z. B. Modus oder Lüfterstufe):
+        { art: "auswahl", titel: "Modus", optionen: [
+            { beschriftung: "Kühlen", symbol: "❄️", befehl: "..." },
+            { beschriftung: "Heizen", symbol: "🔥", befehl: "..." }
+        ] }
+        Optional pro Option: tempo: "0.5s" = wie schnell das Symbol
+        beim Tippen dreht (gut für Lüfterstufen).
+
+     3) Regler (z. B. Temperatur) – man stellt den Wert ein und tippt
+        dann auf "übernehmen". {wert} wird durch die Zahl ersetzt:
+        { art: "regler", titel: "Temperatur", min: 16, max: 30, schritt: 1,
+          start: 22, einheit: "°C", befehl: "Klima Büro {wert}" }
+
+        Falls der Bot keine einzelnen Temperaturen kennt, sondern nur
+        Buttons wie "Temperatur +" und "Temperatur -", nimm stattdessen
+        eine Auswahl mit zwei Optionen.
+
+   Jeder Raum hat außerdem "farbe": eine Zahl von 0 bis 360 für den
+   Farbton (0 = rot, 40 = orange, 150 = grün, 210 = blau, 270 = lila).
+   ===================================================================== */
+
+const KONFIGURATION = {
+
+  titel: "Zuhause",
+
+  raeume: [
+    {
+      name: "Büro",
+      symbol: "💻",
+      farbe: 215,
+      geraete: [
+        { name: "Licht Moritz", symbol: "💡", animation: "licht",
+          steuerung: [
+            { art: "schalter", befehlAn: "Licht MO An", befehlAus: "Licht MO Aus" }
+          ] },
+
+        { name: "Licht Christof", symbol: "💡", animation: "licht",
+          steuerung: [
+            { art: "schalter", befehlAn: "Licht CZ An", befehlAus: "Licht CZ Aus" }
+          ] },
+
+        { name: "Klimaanlage", symbol: "❄️", animation: "klima", info: "Büro",
+          steuerung: [
+            { art: "schalter", befehlAn: "Klima An", befehlAus: "Klima Aus" },
+            { art: "regler", titel: "Temperatur", min: 16, max: 28, schritt: 1, start: 22,
+              einheit: "°C", befehl: "Klima {wert}" },
+            { art: "auswahl", titel: "Modus", optionen: [
+                { beschriftung: "Kühlen", symbol: "❄️", befehl: "Klima Cool" },
+                { beschriftung: "Heizen", symbol: "🔥", befehl: "Klima Heat" }
+            ] },
+            { art: "auswahl", titel: "Lüfter", optionen: [
+                { beschriftung: "Low",  symbol: "🌀", tempo: "1.4s", befehl: "Klima Fan Low" },
+                { beschriftung: "Mid",  symbol: "🌀", tempo: "0.7s", befehl: "Klima Fan Mid" },
+                { beschriftung: "High", symbol: "🌀", tempo: "0.3s", befehl: "Klima Fan High" }
+            ] }
+          ] }
+      ]
+    },
+    {
+      name: "Schlafzimmer Christof",
+      symbol: "🛏️",
+      farbe: 270,
+      geraete: [
+        { name: "Wasserbett", symbol: "🌊", animation: "wasser", pruefen: true,
+          info: "Funktion noch unklar",
+          steuerung: [
+            { art: "schalter", befehlAn: "WB CZ An", befehlAus: "WB CZ Aus" }
+          ] },
+
+        { name: "Heizung", symbol: "🔥", animation: "heizung",
+          steuerung: [
+            { art: "schalter", befehlAn: "HZ CZ An", befehlAus: "HZ CZ Aus" }
+          ] }
+      ]
+    },
+    {
+      name: "Bad unten",
+      symbol: "🛁",
+      farbe: 188,
+      geraete: [
+        { name: "Heizung", symbol: "🔥", animation: "heizung",
+          steuerung: [
+            { art: "schalter", befehlAn: "HZ Bad An", befehlAus: "HZ Bad Aus" }
+          ] }
+      ]
+    },
+    {
+      name: "Schlafzimmer Moritz",
+      symbol: "🌙",
+      farbe: 155,
+      geraete: [
+        { name: "Klimaanlage", symbol: "❄️", animation: "klima", info: "Schlafzimmer Moritz",
+          steuerung: [
+            { art: "schalter", befehlAn: "Klima MO An", befehlAus: "Klima MO Aus" },
+            { art: "regler", titel: "Temperatur", min: 16, max: 30, schritt: 1, start: 21,
+              einheit: "°C", befehl: "Klima MO {wert}" },
+            { art: "auswahl", titel: "Modus", optionen: [
+                { beschriftung: "Kühlen", symbol: "❄️", befehl: "Klima MO Cool" },
+                { beschriftung: "Heizen", symbol: "🔥", befehl: "Klima MO Heat" }
+            ] },
+            { art: "auswahl", titel: "Lüfter", optionen: [
+                { beschriftung: "Low",  symbol: "🌀", tempo: "1.4s", befehl: "Klima MO Fan Low" },
+                { beschriftung: "Mid",  symbol: "🌀", tempo: "0.7s", befehl: "Klima MO Fan Mid" },
+                { beschriftung: "High", symbol: "🌀", tempo: "0.3s", befehl: "Klima MO Fan High" }
+            ] }
+          ] }
+      ]
+    }
+  ]
+};
+
+/* =====================================================================
+   Ab hier beginnt der Programmcode – normalerweise musst du hier
+   nichts ändern.
+   ===================================================================== */
+
+const tg = window.Telegram && window.Telegram.WebApp;
+// Außerhalb von Telegram meldet das SDK die Plattform "unknown".
+// (initData ist bei Apps, die über einen Tastatur-Button geöffnet werden, oft leer.)
+const IN_TELEGRAM = !!(tg && tg.platform && tg.platform !== "unknown");
+
+const speicher = {
+  lesen(k) { try { return localStorage.getItem("zuhause-" + k); } catch (e) { return null; } },
+  schreiben(k, v) { try { localStorage.setItem("zuhause-" + k, String(v)); } catch (e) {} }
+};
+
+function haptik(art) {
+  if (!IN_TELEGRAM) { if (navigator.vibrate) navigator.vibrate(art === "erfolg" ? [8, 40, 12] : 8); return; }
+  try {
+    if (art === "erfolg") tg.HapticFeedback.notificationOccurred("success");
+    else if (art === "warnung") tg.HapticFeedback.notificationOccurred("warning");
+    else if (art === "auswahl") tg.HapticFeedback.selectionChanged();
+    else tg.HapticFeedback.impactOccurred(art || "light");
+  } catch (e) {}
+}
+
+// ---------- Telegram-Design übernehmen ----------
+function designUebernehmen() {
+  if (!IN_TELEGRAM) return;
+  const p = tg.themeParams || {};
+  const root = document.documentElement;
+  root.dataset.theme = tg.colorScheme === "dark" ? "dark" : "light";
+  const zuordnung = {
+    "--bg": p.secondary_bg_color || p.bg_color,
+    "--section": p.section_bg_color || p.bg_color,
+    "--text": p.text_color,
+    "--hint": p.hint_color || p.subtitle_text_color
+  };
+  for (const [name, wert] of Object.entries(zuordnung)) {
+    if (wert) root.style.setProperty(name, wert); else root.style.removeProperty(name);
+  }
+  try { tg.setHeaderColor(zuordnung["--bg"] || "secondary_bg_color"); } catch (e) {}
+  try { tg.setBackgroundColor(zuordnung["--bg"] || "secondary_bg_color"); } catch (e) {}
+}
+
+// ---------- Hilfsfunktionen ----------
+function el(tag, klasse, text) {
+  const e = document.createElement(tag);
+  if (klasse) e.className = klasse;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function neuStarten(e, ...klassen) {
+  e.classList.remove(...klassen);
+  void e.offsetWidth;
+  e.classList.add(...klassen);
+}
+
+function wellenEffekt(taste, ereignis) {
+  const box = taste.getBoundingClientRect();
+  const x = ereignis && ereignis.clientX ? ereignis.clientX - box.left : box.width / 2;
+  const y = ereignis && ereignis.clientY ? ereignis.clientY - box.top : box.height / 2;
+  const w = el("span", "welle-fx");
+  w.style.left = x + "px"; w.style.top = y + "px";
+  taste.append(w);
+  setTimeout(() => w.remove(), 650);
+}
+
+function druckEffekt(taste) {
+  const los = () => taste.classList.remove("gedrueckt");
+  taste.addEventListener("pointerdown", () => taste.classList.add("gedrueckt"));
+  taste.addEventListener("pointerup", los);
+  taste.addEventListener("pointerleave", los);
+  taste.addEventListener("pointercancel", los);
+}
+
+// ---------- Befehl senden ----------
+let gesperrt = false;
+let toastTimer = null;
+
+function senden(befehl, taste, karte, effekt, ereignis) {
+  if (gesperrt || !befehl) return;
+
+  wellenEffekt(taste, ereignis);
+  const icon = karte && karte.querySelector(".icon");
+  if (icon) {
+    icon.classList.remove("e-an", "e-aus", "e-puls", "e-kalt", "e-warm");
+    void icon.offsetWidth;
+    icon.classList.add("e-" + effekt);
+  }
+
+  // Häkchen anzeigen; ein laufender Rücksetz-Timer derselben Taste wird ersetzt
+  taste.classList.add("ok");
+  clearTimeout(taste._okTimer);
+  haptik("erfolg");
+
+  if (IN_TELEGRAM) {
+    gesperrt = true;
+    // Kurz warten, damit die Animation sichtbar ist – danach schließt Telegram die App
+    setTimeout(() => {
+      try { tg.sendData(befehl); } catch (e) {}
+    }, 450);
+    // Ist die App nach 3 s noch offen, hat sendData nicht gewirkt
+    // (z. B. weil die App nicht über den Tastatur-Button geöffnet wurde).
+    taste._okTimer = setTimeout(() => {
+      gesperrt = false;
+      taste.classList.remove("ok");
+      haptik("warnung");
+      toastZeigen(
+        "Bitte öffne die App über den Button unter dem Eingabefeld im Bot-Chat.",
+        "Befehl konnte nicht gesendet werden",
+        true
+      );
+    }, 3000);
+  } else {
+    toastZeigen(befehl);
+    taste._okTimer = setTimeout(() => taste.classList.remove("ok"), 900);
+  }
+}
+
+function toastZeigen(text, ueberschrift = "Demo – würde an den Bot senden:", warnung = false) {
+  const t = document.getElementById("toast");
+  t.replaceChildren(el("small", null, ueberschrift), el("b", null, text));
+  t.classList.toggle("warnung", warnung);
+  t.classList.add("sichtbar");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("sichtbar"), warnung ? 5000 : 2200);
+}
+
+function taste(klasse, inhalt, befehl, karte, effekt) {
+  const b = el("button", "tippbar " + klasse);
+  b.type = "button";
+  if (typeof inhalt === "string") b.textContent = inhalt; else b.append(...inhalt);
+  druckEffekt(b);
+  b.addEventListener("click", (ev) => senden(befehl, b, karte, effekt, ev));
+  return b;
+}
+
+// ---------- Bedienelemente ----------
+function schalter(s, karte) {
+  const box = el("div", "segment");
+  box.append(
+    taste("seg an", "An", s.befehlAn, karte, "an"),
+    taste("seg", "Aus", s.befehlAus, karte, "aus")
+  );
+  return box;
+}
+
+function effektFuer(option) {
+  const t = (option.beschriftung + " " + option.befehl).toLowerCase();
+  if (/kühl|kuehl|cool|kalt/.test(t)) return "kalt";
+  if (/heiz|heat|warm/.test(t)) return "warm";
+  return "puls";
+}
+
+function auswahl(a, karte) {
+  const box = el("div");
+  if (a.titel) box.append(el("div", "abschnitt-titel", a.titel));
+  const chips = el("div", "chips");
+  for (const o of a.optionen || []) {
+    const teile = [];
+    if (o.symbol) teile.push(el("span", "csym", o.symbol));
+    teile.push(el("span", null, o.beschriftung));
+    const c = taste("chip", teile, o.befehl, karte, effektFuer(o));
+    if (o.tempo) c.style.setProperty("--tempo", o.tempo);
+    chips.append(c);
+  }
+  box.append(chips);
+  return box;
+}
+
+function regler(r, karte, schluessel) {
+  const min = Number(r.min ?? 16), max = Number(r.max ?? 30), schritt = Number(r.schritt ?? 1);
+  let wert = Number(speicher.lesen(schluessel) ?? r.start ?? min);
+  if (isNaN(wert) || wert < min || wert > max) wert = Number(r.start ?? min);
+  const einheit = r.einheit || "";
+
+  const box = el("div");
+  const kopf = el("div", "regler-kopf");
+  const anzeige = el("div", "regler-wert");
+  kopf.append(el("div", "abschnitt-titel", r.titel || "Wert"), anzeige);
+
+  const zeile = el("div", "regler-zeile");
+  const minus = el("button", "tippbar rund", "−"); minus.type = "button";
+  const plus = el("button", "tippbar rund", "+"); plus.type = "button";
+  druckEffekt(minus); druckEffekt(plus);
+  const schieber = el("input");
+  Object.assign(schieber, { type: "range", min, max, step: schritt, value: wert });
+  schieber.setAttribute("aria-label", r.titel || "Wert");
+  zeile.append(minus, schieber, plus);
+
+  const knopf = el("button", "tippbar senden"); knopf.type = "button";
+  druckEffekt(knopf);
+
+  function setzen(neu, stoss) {
+    neu = Math.min(max, Math.max(min, Math.round(neu / schritt) * schritt));
+    if (neu !== wert) haptik("auswahl");
+    wert = neu;
+    schieber.value = wert;
+    schieber.style.setProperty("--p", ((wert - min) / (max - min || 1) * 100) + "%");
+    anzeige.replaceChildren(document.createTextNode(String(wert)), el("small", null, einheit));
+    knopf.textContent = `${wert} ${einheit} übernehmen`.replace(/\s+/g, " ");
+    speicher.schreiben(schluessel, wert);
+    if (stoss) neuStarten(anzeige, "stoss"), setTimeout(() => anzeige.classList.remove("stoss"), 200);
+  }
+
+  minus.addEventListener("click", () => setzen(wert - schritt, true));
+  plus.addEventListener("click", () => setzen(wert + schritt, true));
+  schieber.addEventListener("input", () => setzen(Number(schieber.value), false));
+  knopf.addEventListener("click", (ev) => {
+    const befehl = String(r.befehl || "").replace("{wert}", String(wert));
+    senden(befehl, knopf, karte, "puls", ev);
+  });
+
+  setzen(wert, false);
+  box.append(kopf, zeile, knopf);
+  return box;
+}
+
+// ---------- Gerätekarte ----------
+function karteBauen(geraet, index, raumIndex) {
+  const steuerung = geraet.steuerung || [];
+  const breit = steuerung.length > 1 || steuerung.some(s => s.art !== "schalter");
+  const karte = el("article", "karte" + (breit ? " breit" : ""));
+  karte.style.setProperty("--i", index);
+
+  const kopf = el("div", "karte-kopf");
+  const icon = el("div", "icon " + (geraet.animation || ""), geraet.symbol || "🔘");
+  const texte = el("div");
+  texte.append(el("div", "karte-name", geraet.name || ""));
+  if (geraet.info) texte.append(el("div", "karte-info", geraet.info));
+  if (geraet.pruefen && !IN_TELEGRAM) texte.append(el("span", "pruefen", "bitte prüfen"));
+  kopf.append(icon, texte);
+  karte.append(kopf);
+
+  steuerung.forEach((s, i) => {
+    if (i > 0) karte.append(el("div", "trenner"));
+    const schluessel = `regler-${raumIndex}-${index}-${i}`;
+    if (s.art === "schalter") karte.append(schalter(s, karte));
+    else if (s.art === "auswahl") karte.append(auswahl(s, karte));
+    else if (s.art === "regler") karte.append(regler(s, karte, schluessel));
+    else karte.append(el("div", "leer", `Unbekannte Art „${s.art}“`));
+  });
+  return karte;
+}
+
+// ---------- Räume ----------
+const raeume = KONFIGURATION.raeume || [];
+let aktuell = -1;
+
+function indikatorSetzen() {
+  const r = document.getElementById("reiter");
+  const t = r.querySelectorAll("button")[aktuell];
+  if (!t) return;
+  const ind = document.getElementById("indikator");
+  ind.style.width = t.offsetWidth + "px";
+  ind.style.transform = `translateX(${t.offsetLeft}px)`;
+}
+
+function raumZeigen(index) {
+  if (index < 0 || index >= raeume.length || index === aktuell) return;
+  const richtung = index > aktuell ? "rein-rechts" : "rein-links";
+  const erster = aktuell === -1;
+  aktuell = index;
+  const raum = raeume[index];
+
+  document.documentElement.style.setProperty("--hue", raum.farbe ?? 215);
+
+  const reiter = document.getElementById("reiter");
+  reiter.querySelectorAll("button").forEach((b, i) => b.setAttribute("aria-selected", String(i === index)));
+  indikatorSetzen();
+  reiter.querySelectorAll("button")[index].scrollIntoView({ inline: "center", block: "nearest", behavior: erster ? "auto" : "smooth" });
+
+  const buehne = document.getElementById("buehne");
+  const bereich = el("section", "raum" + (erster ? "" : " " + richtung));
+
+  const kopf = el("div", "raum-kopf");
+  const texte = el("div");
+  const anzahl = (raum.geraete || []).length;
+  texte.append(el("h2", null, raum.name || ""), el("p", null, anzahl === 1 ? "1 Gerät" : `${anzahl} Geräte`));
+  kopf.append(el("div", "raum-symbol", raum.symbol || "🏠"), texte);
+
+  const kacheln = el("div", "kacheln");
+  (raum.geraete || []).forEach((g, i) => kacheln.append(karteBauen(g, i, index)));
+  if (!anzahl) kacheln.append(el("div", "leer", "Noch keine Geräte eingetragen."));
+
+  bereich.append(kopf, kacheln);
+  buehne.replaceChildren(bereich);
+  speicher.schreiben("raum", index);
+}
+
+function reiterBauen() {
+  const reiter = document.getElementById("reiter");
+  raeume.forEach((raum, i) => {
+    const b = el("button");
+    b.type = "button";
+    b.setAttribute("role", "tab");
+    b.append(el("span", "rsym", raum.symbol || ""), document.createTextNode(raum.name || ""));
+    b.addEventListener("click", () => { if (i !== aktuell) haptik("auswahl"); raumZeigen(i); });
+    reiter.append(b);
+  });
+  window.addEventListener("resize", indikatorSetzen);
+}
+
+// Wischen zwischen Räumen
+function wischenAktivieren() {
+  const buehne = document.getElementById("buehne");
+  let sx = 0, sy = 0, aktiv = false;
+  buehne.addEventListener("touchstart", (e) => {
+    if (e.target.closest("input")) { aktiv = false; return; }
+    aktiv = true; sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+  }, { passive: true });
+  buehne.addEventListener("touchend", (e) => {
+    if (!aktiv) return;
+    const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+    if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      const ziel = aktuell + (dx < 0 ? 1 : -1);
+      if (ziel >= 0 && ziel < raeume.length) { haptik("auswahl"); raumZeigen(ziel); }
+    }
+  }, { passive: true });
+}
+
+// ---------- Demo: Befehlsliste ----------
+function befehlslisteBauen() {
+  const liste = document.getElementById("befehlsliste");
+  for (const raum of raeume) {
+    liste.append(el("h4", null, `${raum.symbol || ""} ${raum.name}`));
+    for (const g of raum.geraete || []) {
+      const zeile = el("div");
+      zeile.append(el("span", null, g.name + ": "));
+      for (const s of g.steuerung || []) {
+        const befehle = s.art === "schalter" ? [s.befehlAn, s.befehlAus]
+          : s.art === "auswahl" ? (s.optionen || []).map(o => o.befehl)
+          : s.art === "regler" ? [s.befehl] : [];
+        befehle.filter(Boolean).forEach(b => zeile.append(el("code", null, b)));
+      }
+      liste.append(zeile);
+    }
+  }
+  const knopf = document.getElementById("liste-knopf");
+  knopf.addEventListener("click", () => {
+    liste.hidden = !liste.hidden;
+    knopf.textContent = liste.hidden ? "Alle Befehle anzeigen" : "Befehle ausblenden";
+  });
+}
+
+// ---------- Start ----------
+function begruessung() {
+  const h = new Date().getHours();
+  if (h < 5 || h >= 22) return "Gute Nacht";
+  if (h < 11) return "Guten Morgen";
+  if (h < 18) return "Guten Tag";
+  return "Guten Abend";
+}
+
+if (IN_TELEGRAM) {
+  tg.ready();
+  tg.expand();
+  designUebernehmen();
+  tg.onEvent("themeChanged", designUebernehmen);
+}
+
+document.getElementById("titel").textContent = KONFIGURATION.titel || "Zuhause";
+document.title = KONFIGURATION.titel || "Zuhause";
+document.getElementById("gruss").textContent = begruessung();
+document.getElementById("demo").hidden = IN_TELEGRAM;
+if (!IN_TELEGRAM) befehlslisteBauen();
+
+reiterBauen();
+wischenAktivieren();
+let start = Number(speicher.lesen("raum"));
+if (!(start >= 0 && start < raeume.length)) start = 0;
+raumZeigen(start);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(indikatorSetzen);
+</script>
+</body>
+</html>
